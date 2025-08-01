@@ -1,0 +1,17 @@
+---
+import type { GetStaticPaths } from "astro";
+import Layout from "../layouts/Layout.astro";
+import StartReactApp from "../components/StartReactApp.astro";
+
+// https://docs.astro.build/en/guides/typescript/#infer-getstaticpaths-types
+export const getStaticPaths = (() => {
+  const contentPaths = [undefined, "about"].map((id) => ({
+    params: { path: id },
+  }));
+  return contentPaths;
+}) satisfies GetStaticPaths;
+---
+
+<Layout>
+  <StartReactApp />
+</Layout>

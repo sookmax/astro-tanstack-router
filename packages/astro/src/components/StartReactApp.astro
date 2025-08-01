@@ -1,0 +1,49 @@
+---
+import {
+  createRequestHandler,
+  RouterServer,
+} from "@tanstack/react-router/ssr/server";
+import React from "react";
+import ReactDOMServer from "react-dom/server";
+import { createRouter, AppContext, StartClientApp } from "@package/react";
+
+const appContext: AppContext = {
+  title: "Astro as a pre-renderer for TanStack Router",
+  description: "A TanStack Router app running in Astro",
+};
+
+// https://tanstack.com/router/latest/docs/framework/react/examples/basic-ssr-file-based
+// Create a request handler
+const handler = createRequestHandler({
+  request: Astro.request,
+  createRouter: () => {
+    const router = createRouter();
+    return router;
+  },
+});
+
+let appHtml = "";
+let injectedHtml = "";
+
+// https://github.com/TanStack/router/blob/main/packages/react-start-server/src/defaultRenderHandler.tsx
+// https://github.com/TanStack/router/blob/main/packages/react-router/src/ssr/renderRouterToString.tsx
+await handler(async ({ router }) => {
+  appHtml = ReactDOMServer.renderToString(
+    React.createElement(AppContext, {
+      value: appContext,
+      children: React.createElement(RouterServer, {
+        router,
+      }),
+    })
+  );
+  injectedHtml = await Promise.all(router.serverSsr!.injectedHtml).then(
+    (htmls) => htmls.join("")
+  );
+
+  return new Response(); // not used
+});
+---
+
+<div id="tsr-root" set:html={appHtml} />
+<Fragment set:html={injectedHtml} />
+<StartClientApp rootId="tsr-root" context={appContext} client:only="react" />
