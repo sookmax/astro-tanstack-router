@@ -1,5 +1,5 @@
 import ReactDOM from "react-dom/client";
-import { StartClient as TanStackStartClient } from "./lib/StartClient";
+import { RouterClient } from "@tanstack/react-router/ssr/client";
 import { useEffect } from "react";
 import { createRouter } from "./router";
 import { AppContext } from "./AppContext";
@@ -19,8 +19,8 @@ export function StartClientApp({
         ReactDOM.hydrateRoot(
           tsrRoot,
           <AppContext value={context}>
-            <TanStackStartClient router={router} />
-          </AppContext>
+            <RouterClient router={router} />
+          </AppContext>,
         );
       } else {
         // https://react.dev/reference/react-dom/client/createRoot#root-render-caveats
@@ -28,8 +28,8 @@ export function StartClientApp({
         // By letting the client side React take over "#tsr-root" div, the hydration error is no longer thrown.
         ReactDOM.createRoot(tsrRoot).render(
           <AppContext value={context}>
-            <TanStackStartClient router={router} />
-          </AppContext>
+            <RouterClient router={router} />
+          </AppContext>,
         );
       }
     }
