@@ -16,17 +16,13 @@ const appContext: AppContext = {
 // Create a request handler
 const handler = createRequestHandler({
   request: Astro.request,
-  createRouter: () => {
-    const router = createRouter();
-    return router;
-  },
+  createRouter,
 });
 
 let appHtml = "";
 let injectedHtml = "";
 
-// https://github.com/TanStack/router/blob/main/packages/react-start-server/src/defaultRenderHandler.tsx
-// https://github.com/TanStack/router/blob/main/packages/react-router/src/ssr/renderRouterToString.tsx
+// https://github.com/TanStack/router/blob/e085a0a6bdfe9aaf570f7df81b83f1941c0d86f7/packages/react-router/src/ssr/renderRouterToString.tsx#L5
 await handler(async ({ router }) => {
   appHtml = ReactDOMServer.renderToString(
     React.createElement(AppContext, {
@@ -34,11 +30,14 @@ await handler(async ({ router }) => {
       children: React.createElement(RouterServer, {
         router,
       }),
-    })
+    }),
   );
-  injectedHtml = await Promise.all(router.serverSsr!.injectedHtml).then(
-    (htmls) => htmls.join("")
-  );
+
+  router.serverSsr!.setRenderFinished();
+
+  injectedHtml = router.serverSsr!.takeBufferedHtml() ?? "";
+
+  router.serverSsr?.cleanup();
 
   return new Response(); // not used
 });

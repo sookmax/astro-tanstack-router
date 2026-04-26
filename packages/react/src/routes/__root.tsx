@@ -1,4 +1,4 @@
-import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
+import { createRootRoute, Link, Outlet, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { useAppContext } from "../AppContext";
 
@@ -30,6 +30,7 @@ function RouteComponent() {
       </div>
       <hr />
       <Outlet />
+      <Scripts />
       <TanStackRouterDevtools />
     </>
   );
