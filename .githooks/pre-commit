@@ -1,0 +1,3 @@
+#!/bin/sh
+# Wired up by the `prepare` script (git config core.hooksPath .githooks).
+pnpm lint

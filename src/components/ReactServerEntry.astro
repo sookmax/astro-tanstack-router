@@ -1,0 +1,113 @@
+---
+// The prerender half of the Astro ↔ TanStack Router bridge (ReactClientEntry
+// is the other half). A page fills a QueryClient in its frontmatter and passes
+// it in; this renders the router to a string with that cache at build time,
+// and ships the cache along so the client hydrates without refetching.
+// https://tanstack.com/router/latest/docs/framework/react/examples/basic-ssr-file-based
+import ReactDOMServer from "react-dom/server";
+import React from "react";
+import { uneval } from "devalue";
+import {
+  RouterServer,
+  createRequestHandler,
+  transformReadableStreamWithRouter,
+} from "@tanstack/react-router/ssr/server";
+import { createRouter } from "@/react/router";
+import { ReactClientEntry } from "@/react/ReactClientEntry";
+import { PageLoading } from "@/react/components/PageLoading";
+import { ssrLoadingIndicator } from "@/utils/ssrLoadingIndicator";
+import { getQueryClient } from "@/lib/query-common";
+import type { RouterContext } from "@/lib/schemas/routerContext.schema";
+
+type Props = Partial<RouterContext>;
+
+const queryClient = Astro.props.queryClient ?? getQueryClient();
+
+// createRouter dehydrates the cache — so the page must have filled it first.
+const router = createRouter({ ...Astro.props, queryClient });
+
+// Only the dehydrated cache goes to the client; the live QueryClient stays here.
+const clientRouterContext: Partial<RouterContext> = {
+  dehydratedQueryState: router.options.context.dehydratedQueryState,
+};
+
+// While prerendering, Astro.request is a synthetic request for the page's own
+// path (`/entries/3`), which is all the router needs to match the route.
+const handler = createRequestHandler({
+  request: Astro.request,
+  createRouter: () => router,
+});
+
+const reactRootId = "react-root";
+
+let reactHtml = "";
+let injectedHtml = "";
+
+// The handler expects a Response back, but a non-page Astro component can't
+// return one — so render into strings and return a dummy.
+await handler(async ({ router }) => {
+  // Adapted from react-router's renderRouterToString (→ router-core's
+  // transformHtmlStringWithRouter):
+  // https://github.com/TanStack/router/blob/main/packages/react-router/src/ssr/renderRouterToString.tsx
+  // https://github.com/TanStack/router/blob/main/packages/router-core/src/ssr/transformStreamWithRouter.ts
+  //
+  // The router's hydration scripts (the dehydrated matches, `$_TSR`) are merged
+  // into the app's HTML stream: after a rendered `<Scripts />` boundary, or —
+  // with none — after the app stream ends. Our tree is a fragment inside
+  // Astro's page and renders no `<Scripts />`, so we feed the transform an
+  // EMPTY app stream: it ends at once (→ setRenderFinished), finds no boundary,
+  // and the output is exactly the scripts to inject. The stream must be
+  // closed — an open one would leave the transform waiting for app bytes.
+  // (Older routers exposed this as serverSsr.takeBufferedHtml().)
+  try {
+    reactHtml = ReactDOMServer.renderToString(
+      React.createElement(RouterServer, { router }),
+    );
+
+    const scripts = transformReadableStreamWithRouter(
+      router,
+      new ReadableStream<string>({ start: (controller) => controller.close() }),
+    );
+    // router-core's own readUtf8Stream isn't exported; Response decodes the
+    // UTF-8 byte stream the same way.
+    injectedHtml = await new Response(scripts).text();
+
+    return new Response(null, { status: 200 });
+  } catch (error) {
+    // At build time a swallowed error would ship a blank page; fail the build.
+    console.error("Render to string error:", error);
+    throw error;
+  } finally {
+    // The transform cleans up when its stream terminates; this covers a throw
+    // before it ran (serverSsr.cleanup() is idempotent).
+    router.serverSsr?.cleanup();
+  }
+});
+---
+
+{/*
+  The hydration overlay lives here, not in each page: this component mounts
+  the router whose __root effect removes it, so the overlay and its remover
+  can't drift apart. The 404 page doesn't render ReactServerEntry, so it never
+  gets a spinner nobody removes.
+*/}
+<PageLoading id={ssrLoadingIndicator.id} />
+
+{/*
+  The context goes to the client as JavaScript SOURCE, not JSON. `uneval`
+  emits an expression in which `created_at` is `new Date(...)`, so evaluating
+  the assignment revives real Dates (and Map/Set/undefined) — no client-side
+  devalue runtime, no revival step.
+
+  That's why this is `set:html`, not `define:vars`: define:vars
+  JSON-stringifies its inputs, collapsing those Dates back into strings.
+  `uneval` escapes `<`, U+2028 and U+2029, so its output can't break out of
+  the script tag.
+*/}
+<script
+  is:inline
+  set:html={`window.__ROUTER_CONTEXT__ = ${uneval(clientRouterContext)}; document.currentScript.remove();`}
+/>
+<div id={reactRootId} set:html={reactHtml} />
+<Fragment set:html={injectedHtml} />
+<ReactClientEntry rootId={reactRootId} client:only="react" />

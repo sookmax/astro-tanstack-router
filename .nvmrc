@@ -1,3 +1,1 @@
-# to default to the latest LTS version
-# https://github.com/nvm-sh/nvm?tab=readme-ov-file#nvmrc
-lts/*
+24

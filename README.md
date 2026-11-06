@@ -1,249 +1,126 @@
-# Astro as a pre-renderer for TanStack Router React application
+# astro-tanstack-router
 
-This project demonstrates how to use [Astro](https://astro.build/) to pre-render a React web application that uses [TanStack Router](https://tanstack.com/router/latest) for client-side routing. In essence, Astro acts as the server-side of [TanStack Start](https://tanstack.com/start/latest).
+A static-site starter: **Astro** prerenders every page at build time, and **TanStack Router** takes over in the browser for client-side navigation, with **TanStack Query** holding the data on both sides. It's the static sibling of [astro-tanstack-kysely-starter](https://github.com/sookmax/astro-tanstack-kysely-starter): the same router bridge and the same guestbook look, but with no server, database, auth or mutations at runtime. `dist/` is plain files for any static host.
 
-I arrived at this Astro + TanStack Router hybrid approach while looking for a way to pre-render a React SPA that uses client-side routing. At the time of writing, I wasn’t ready to jump into TanStack Start due to its beta status. For most of my use cases, an SPA is sufficient—I just needed a way to generate the initial HTML payload for better initial load performance.
+![home list view screenshot](assets/home-list-view.png)
 
-Astro’s [Islands architecture](https://docs.astro.build/en/concepts/islands/) makes it easy to pre-render simple React apps. However, once you introduce a client-side router, hydration becomes tricky. The router must handle its own internal data hand-off from server to client, which doesn’t work well with Astro’s default React hydration. (This may be specific to TanStack Router—I haven’t tested [React Router](https://reactrouter.com/) with Astro.)
+[Live demo](https://astro-tanstack-router.vercel.app/)
 
----
+The demo app is a read-only **guestbook** with two pages:
 
-### update (2026-04-26)
+- `/`: the list of entries
+- `/entries/:id`: one entry
 
-Tanstack router's [renderRouterToString](https://github.com/TanStack/router/blob/e085a0a6bdfe9aaf570f7df81b83f1941c0d86f7/packages/react-router/src/ssr/renderRouterToString.tsx#L5) seemed to have gone through a significant structural change, and so now we also need to add [\<Scripts /\>](https://tanstack.com/router/latest/docs/guide/document-head-management#scripts-) "as high up in the component tree as possible". So I placed it in `__root.tsx`. Make sure to include `<Script />` in your component tree otherwise the hydration would not work!
+Load either page directly and you get Astro's prerendered HTML, which the router then hydrates. Click between them and nothing reloads—client-side navigations. The router runs the next route's `beforeLoad`, TanStack Query fetches a small JSON file that Astro also generated at build time, and the new page renders in place. Hovering a card preloads its JSON before the click.
 
-#### packages/react/src/routes/\_\_root.tsx
+## Stack
 
-```diff
-import { createRootRoute, Link, Outlet, Scripts } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { useAppContext } from "../AppContext";
+|             |                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------- |
+| Rendering   | Astro 7 (`output: "static"`) + React 19                                               |
+| Routing     | TanStack Router (file-based, prerendered through a hand-rolled Astro bridge)          |
+| Data        | TanStack Query 5, the `query()` API, filled at build time and hydrated in the browser |
+| Data source | A TS seed (`src/data/entries.ts`) plus static JSON endpoints generated from it        |
+| Validation  | Zod 4                                                                                 |
+| Styling     | Tailwind CSS 4 with `light-dark()` semantic tokens                                    |
+| Tooling     | oxlint (type-aware), `astro check`, Prettier, Storybook 10                            |
 
-export const Route = createRootRoute({
-  component: RouteComponent,
-});
+## Getting started
 
-function RouteComponent() {
-  const { title, description } = useAppContext();
-  return (
-    <>
-      <div className="p-4 bg-emerald-200">TanStack Router Root</div>
-      <div className="p-4 bg-sky-200">
-        <div>Title and description from Astro through React Context!</div>
-        <h2 className="text-xl font-semibold mt-4">{title}</h2>
-        <p className="text-gray-500">{description}</p>
-      </div>
-      <div className="p-4 bg-amber-200 flex gap-2">
-        <Link to="/" className="[&.active]:font-bold">
-          Home
-        </Link>{" "}
-        <Link to="/about" className="[&.active]:font-bold">
-          About
-        </Link>
-      </div>
-      <div className="p-4 space-y-4 bg-zinc-100">
-        <p>{`👆 when you interact with the <Link>s above, you're client-side navigating with TanStack Router! (snappy and fast ⚡️)`}</p>
-        <p>{`🔁 when you click the browser refresh button (i.e., requesting the page to the server), Astro's pre-rendered html will be sent! (and then TanStack Router app will be hydrated)`}</p>
-      </div>
-      <hr />
-      <Outlet />
-++    <Scripts />
-      <TanStackRouterDevtools />
-    </>
-  );
-}
+Requires Node 24 and pnpm.
 
+```bash
+pnpm install    # also points git at .githooks (see below)
+pnpm dev        # http://localhost:4321
 ```
 
----
+> **Heads-up: `pnpm install` changes your git config for this repo.** The `prepare` script runs `git config core.hooksPath .githooks`, which writes to this clone's `.git/config` (not your global config). From then on, git runs only the hooks in `.githooks/`: currently a pre-commit hook that runs `pnpm lint`. Skip it once with `git commit --no-verify`; opt out entirely with `git config --unset core.hooksPath`.
 
-To make TanStack Router behave correctly on hydration, I needed to replicate its server-side logic inside an Astro component. Fortunately, TanStack provides a working example for [SSR with file-based routing](https://tanstack.com/router/latest/docs/framework/react/examples/basic-ssr-file-based). The Astro component that generates the initial HTML in this project—[`StartReactApp.astro`](https://github.com/sookmax/astro-tanstack-router/blob/main/packages/astro/src/components/StartReactApp.astro)—essentially mimics the behavior of `entry-server.tsx` in that example.
+## Commands
 
-### entry-server.tsx
+```bash
+pnpm dev                 # dev server
+pnpm build               # prerender everything into dist/
+pnpm preview             # serve dist/ the way a static host would
 
-```tsx
-// https://tanstack.com/router/latest/docs/framework/react/examples/basic-ssr-file-based?path=examples%2Freact%2Fbasic-ssr-file-based%2Fsrc%2Fentry-server.tsx
-
-...
-
-// Create a request handler
-const handler = createRequestHandler({
-  request,
-  createRouter: () => {
-    const router = createRouter();
-
-    // Update each router instance with the head info from vite
-    router.update({
-      context: {
-        ...router.options.context,
-        head: head,
-      },
-    });
-    return router;
-  },
-});
-
-// Let's use the default stream handler to create the response
-const response = await handler(({ responseHeaders, router }) =>
-  renderRouterToString({
-    responseHeaders,
-    router,
-    children: <RouterServer router={router} />,
-  }),
-);
-
-...
+pnpm lint                # oxlint (TS/React, type-aware) + astro check (.astro files)
+pnpm format              # Prettier
+pnpm storybook           # http://localhost:6006
+pnpm build-storybook     # static Storybook in storybook-static/
+pnpm generate-routes     # regenerate src/react/routeTree.gen.ts (dev/build do this too)
 ```
 
-### Equivalent in Astro: StartReactApp.astro
+## Layout
 
-```tsx
----
-import {
-  createRequestHandler,
-  RouterServer,
-} from "@tanstack/react-router/ssr/server";
-import React from "react";
-import ReactDOMServer from "react-dom/server";
-import { createRouter, AppContext, StartClientApp } from "@package/react";
-
-const appContext: AppContext = {
-  title: "Astro as a pre-renderer for TanStack Router",
-  description: "A TanStack Router app running in Astro",
-};
-
-// https://tanstack.com/router/latest/docs/framework/react/examples/basic-ssr-file-based
-// Create a request handler
-const handler = createRequestHandler({
-  request: Astro.request,
-  createRouter,
-});
-
-let appHtml = "";
-let injectedHtml = "";
-
-// https://github.com/TanStack/router/blob/e085a0a6bdfe9aaf570f7df81b83f1941c0d86f7/packages/react-router/src/ssr/renderRouterToString.tsx#L5
-await handler(async ({ router }) => {
-  appHtml = ReactDOMServer.renderToString(
-    React.createElement(AppContext, {
-      value: appContext,
-      children: React.createElement(RouterServer, {
-        router,
-      }),
-    }),
-  );
-
-  router.serverSsr!.setRenderFinished();
-
-  injectedHtml = router.serverSsr!.takeBufferedHtml() ?? "";
-
-  router.serverSsr?.cleanup();
-
-  return new Response(); // not used
-});
----
-
-<div id="tsr-root" set:html={appHtml} />
-<Fragment set:html={injectedHtml} />
-<StartClientApp rootId="tsr-root" context={appContext} client:only="react" />
+```
+src/
+  data/entries.ts        the seed — the only data source (server-only)
+  pages/
+    index.astro          /             ┐ fill the query cache from the seed at build time,
+    entries/[id].astro   /entries/:id  ┘ then render ReactServerEntry (getStaticPaths → one file per entry)
+    api/entries.json.ts          → dist/api/entries.json     ┐ what the client fetches
+    api/entries/[id].json.ts     → dist/api/entries/<id>.json ┘ on navigation
+    404.astro            static 404 (no router)
+  components/            ReactServerEntry.astro: the prerender half of the router bridge
+  layouts/               Layout.astro
+  react/                 router.tsx, ReactClientEntry.tsx, routes/, components/, hooks/
+  lib/
+    query-common.ts      query keys + QueryClient defaults (shared)
+    query-server.ts      server options: queryFn reads the seed        ┐ same keys
+    query-client.ts      client options: queryFn fetches the JSON      ┘
+    queries/             server-only seed readers
+    fetch/               client fetch wrappers
+    schemas/             client-safe Zod schemas + types
+    apiPaths.ts          the JSON endpoints' URLs
+  utils/
+.storybook/              Storybook (@storybook/tanstack-react)
 ```
 
-We can't use [renderRouterToString](https://github.com/TanStack/router/blob/8efac91d6d7d3e12ed5ef1964392241142492f6a/packages/react-router/src/ssr/renderRouterToString.tsx#L5) like in the SSR example
-because our TanStack Router app is rendered inside Astro, which already manages `<html>` and `<body>` tags. Also, since [Astro components](https://docs.astro.build/en/basics/astro-components/#the-component-script) don’t support JSX in script blocks,
-we use `React.createElement` syntax.
+## How it works
 
----
+### One cache, two ways in
 
-### Client-side Hydration: StartClientApp (packages/react/src/App.tsx)
-
-This React component hydrates the pre-rendered HTML on the client:
-
-```ts
-import ReactDOM from "react-dom/client";
-import { RouterClient } from "@tanstack/react-router/ssr/client";
-import { useEffect } from "react";
-import { createRouter } from "./router";
-import { AppContext } from "./AppContext";
-
-export function StartClientApp({
-  rootId,
-  context,
-}: {
-  rootId: string;
-  context: AppContext;
-}) {
-  useEffect(() => {
-    const tsrRoot = document.getElementById(rootId);
-    if (tsrRoot) {
-      const router = createRouter();
-      if (!location.search) {
-        ReactDOM.hydrateRoot(
-          tsrRoot,
-          <AppContext value={context}>
-            <RouterClient router={router} />
-          </AppContext>,
-        );
-      } else {
-        // https://react.dev/reference/react-dom/client/createRoot#root-render-caveats
-        // "The first time you call root.render, React will clear all the existing HTML content inside the React root before rendering the React component into it."
-        // By letting the client side React take over "#tsr-root" div, the hydration error is no longer thrown.
-        ReactDOM.createRoot(tsrRoot).render(
-          <AppContext value={context}>
-            <RouterClient router={router} />
-          </AppContext>,
-        );
-      }
-    }
-  }, [rootId, context]);
-
-  return null;
-}
+```
+DIRECT HIT (prerendered HTML)                     CLIENT NAVIGATION (a <Link> click)
+─────────────────────────────                     ──────────────────────────────────
+src/pages/entries/[id].astro, at build time       route beforeLoad (src/react/routes/entries/$id.tsx)
+  queryClient.query(getEntryOptions(id))            queryClient.query(fetchEntryOptions(id))
+    queryFn → the seed          ← query-server        queryFn → fetch /api/entries/<id>.json ← query-client
+        │                                                 │
+        ▼                                                 ▼
+ReactServerEntry.astro                             cache filled under ["entries","detail",id]
+  renders the router to a string,
+  ships the dehydrated cache as JS (devalue uneval)
+        │
+        ▼
+ReactClientEntry (client:only) hydrates it
+  → route beforeLoad runs the CLIENT options,
+    finds the key already cached → no request
 ```
 
----
+`query-server.ts` and `query-client.ts` build their options from the same keys (`query-common.ts`). The prerendered page fills the cache with a seed-backed `queryFn`, so the browser's `fetch` `queryFn` never runs for the page you landed on. It runs only when you navigate somewhere whose data isn't cached yet. The data changes only with a new build, so the QueryClient uses `staleTime: "static"`: once an entry is cached, it stays cached for the visit.
 
-### Astro Page Routing (packages/astro/src/pages/[...path].astro)
+The seed lives in `src/data/entries.ts` and is read only through `src/lib/queries/*`, which start with `import "@/utils/server-module"`. If one of them ever leaks into the client bundle, it throws instead of quietly shipping the data in the JS.
 
-We use Astro's [Rest parameters](https://docs.astro.build/en/guides/routing/#rest-parameters) to handle routing and pre-render specified paths:
+### Why static JSON endpoints
 
-```tsx
----
-import type { GetStaticPaths } from "astro";
-import Layout from "../layouts/Layout.astro";
-import StartReactApp from "../components/StartReactApp.astro";
+A client-side navigation needs the next page's data, and there's no server to ask. Astro can prerender endpoints as well as pages, so `src/pages/api/*.json.ts` turn the seed into `dist/api/entries.json` and one `dist/api/entries/<id>.json` per entry, using the same `getStaticPaths` list as the HTML pages. The client then fetches a JSON file that is the same size as the data it needs. Bundling the seed into the client JS would also work, but it would send every entry to every visitor and grow with the data. An unknown id has no JSON file, so the host's 404 becomes `EntryNotFoundError`, which the router's `ErrorFallback` renders.
 
-// https://docs.astro.build/en/guides/typescript/#infer-getstaticpaths-types
-export const getStaticPaths = (() => {
-  const contentPaths = [undefined, "about"].map((id) => ({
-    params: { path: id },
-  }));
-  return contentPaths;
-}) satisfies GetStaticPaths;
----
+### The Astro ↔ TanStack Router bridge
 
-<Layout>
-  <StartReactApp />
-</Layout>
-```
+- `ReactServerEntry.astro` renders `<RouterServer>` with `renderToString`. It then gets the router's hydration scripts (`$_TSR`, the dehydrated matches) from `transformReadableStreamWithRouter`, fed an **empty, closed** stream. Our fragment has no `<Scripts />` boundary, so router-core appends those scripts after the app stream, and the output is exactly the HTML to inject. (Older routers exposed this as `serverSsr.takeBufferedHtml()`.) While prerendering, `Astro.request` is a synthetic request for the page's own path, which is all the router needs.
+- The router context carries the live `queryClient` (never serialized) and `dehydratedQueryState`. Only `dehydratedQueryState` is written into the page, as `window.__ROUTER_CONTEXT__` via devalue's `uneval`, so `Date`s survive as `new Date(...)`. `define:vars` isn't used because it would JSON-stringify them.
+- `createRouter()` (`src/react/router.tsx`) runs on both sides. On the server it dehydrates the page's filled cache. On the client it hydrates that state into a fresh QueryClient.
+- A loading overlay ships in the first paint, and `__root`'s effect removes it once the page is hydrated.
+- The router plugin code-splits route components **for the client environment only** (`environmentName: "client"` in `tsr.vite.plugin.ts`). Vite's SSR module runner also has `import.meta.hot`, and the plugin's dev HMR code would keep the server rendering stale components after an edit, causing hydration mismatches.
+- Astro owns `<head>`, so `<title>` is prerendered by the `.astro` page and kept in sync on client navigation by `useDocumentTitle`. Both use `pageTitle()`.
 
-## Project Structure
+## Storybook
 
-This is a [pnpm workspace](https://pnpm.io/workspaces) monorepo with separate packages for the Astro and React apps.
-Originally, this was to support [Storybook](https://storybook.js.org/) in the React package, but splitting the codebase like this turned out to be a helpful organizational decision.
+`pnpm storybook` runs Storybook with `@storybook/tanstack-react`, which wraps every story in a router so `<Link>` works. Stories live next to their components in `src/react/components/*.stories.tsx` (EntryCard, EntryList, ErrorView). Those components are presentational: data comes in as props and the routes own the queries, so stories need no QueryClient. Storybook runs its own Vite from the root `vite.config.ts` (Tailwind, the `@/*` alias, the router plugin), not from `astro.config.mjs`. The toolbar's colour-scheme switch flips `data-theme` on the root.
 
-- packages/astro (@package/astro)
-- packages/react (@package/react)
+## Lint and type checking
 
-### Common Commands
-
-- `pnpm --filter astro dev`
-
-  Run the Astro dev server (includes React).
-
-- `pnpm --filter astro build`
-
-  Build the Astro project (includes React build).
-
-- `pnpm --filter astro preview`
-
-  Serve the static output from `packages/astro/dist`. Useful for debugging.
+- `oxlint` lints TS/React with type-aware rules **and** reports type errors (`typeCheck: true`), using oxlint-tsgolint's bundled TypeScript 7.
+- `astro check` covers `.astro` files, on the `typescript` 6.x devDependency.
+- One `tsconfig.json` serves both. Keep it free of TS 6 deprecations, which TS 7 removed.

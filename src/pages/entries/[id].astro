@@ -1,0 +1,31 @@
+---
+import type { GetStaticPaths } from "astro";
+import Layout from "@/layouts/Layout.astro";
+import ReactServerEntry from "@/components/ReactServerEntry.astro";
+import { getQueryClient } from "@/lib/query-common";
+import { getEntryOptions } from "@/lib/query-server";
+import { getEntries } from "@/lib/queries/getEntries";
+import { pageTitle } from "@/utils/pageTitle";
+import { EntryIdSchema } from "@/lib/schemas/entryParams.schema";
+
+// One HTML file per seed entry. An id outside this list has no file, so the
+// static host serves 404.html for it.
+// https://docs.astro.build/en/guides/typescript/#infer-getstaticpaths-types
+export const getStaticPaths = (async () => {
+  const entries = await getEntries();
+  return entries.map((entry) => ({
+    params: { id: String(entry.id) },
+  }));
+}) satisfies GetStaticPaths;
+
+const id = EntryIdSchema.parse(Astro.params.id);
+
+const queryClient = getQueryClient();
+// query() returns the data, so the title needs no getQueryData. It's never
+// null here: getStaticPaths only lists ids that exist.
+const entry = await queryClient.query(getEntryOptions(id));
+---
+
+<Layout title={pageTitle(entry?.name ?? "Entry")}>
+  <ReactServerEntry queryClient={queryClient} />
+</Layout>

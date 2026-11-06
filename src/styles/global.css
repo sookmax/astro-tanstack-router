@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/*
+ * Semantic tokens, themed with `light-dark()`: each one flips with
+ * `color-scheme`, so every utility built from them (`bg-card`, `text-ink`,
+ * `border-line`, …) is theme-correct with no `dark:` variants at call sites.
+ *
+ * New radius/shadow tokens must also be registered in utils/cn.ts so
+ * tailwind-merge knows they conflict with the built-in ones.
+ */
+@theme {
+  /* surfaces */
+  --color-canvas: light-dark(#f6f5f2, #11100e);
+  --color-card: light-dark(#ffffff, #1b1a17);
+  --color-fill: light-dark(#eeece8, #2c2a26);
+  --color-fill-strong: light-dark(#e2dfd9, #3b3833);
+  --color-line: light-dark(#e4e0d8, #2e2b27);
+
+  /* text */
+  --color-ink: light-dark(#1a1814, #f3f0ea);
+  --color-ink-muted: light-dark(#6b655c, #a39d93);
+  --color-ink-faint: light-dark(#99928a, #6f6962);
+
+  /* the one accent: your own actions (a like, the primary button) */
+  --color-accent: light-dark(#c2410c, #fb923c);
+  --color-accent-ink: light-dark(#ffffff, #1a1814);
+
+  --color-danger: light-dark(#b91c1c, #f87171);
+
+  --radius-card: 1.25rem;
+  --radius-control: 0.75rem;
+
+  --shadow-card:
+    0 1px 2px light-dark(rgb(0 0 0 / 0.04), transparent),
+    0 12px 32px -12px light-dark(rgb(0 0 0 / 0.12), transparent);
+}
+
+:root {
+  /* follow the OS; `data-theme` (set by the Storybook toolbar) overrides it */
+  color-scheme: light dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-canvas text-ink antialiased;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+
+@layer base {
+  button {
+    @apply cursor-pointer;
+  }
+}

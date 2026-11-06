@@ -1,0 +1,16 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import ReactServerEntry from "@/components/ReactServerEntry.astro";
+import { getQueryClient } from "@/lib/query-common";
+import { getEntryListOptions } from "@/lib/query-server";
+
+// Prerendered: fill the cache from the seed under the same key the route's
+// client options use. ReactServerEntry renders with it and ships it down; the
+// route's beforeLoad then finds it already cached.
+const queryClient = getQueryClient();
+await queryClient.query(getEntryListOptions);
+---
+
+<Layout>
+  <ReactServerEntry queryClient={queryClient} />
+</Layout>

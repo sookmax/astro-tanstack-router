@@ -1,0 +1,22 @@
+{
+  // One tsconfig for the whole repo: the app (src), the Storybook config and
+  // the root config files.
+  //
+  // Checked by TWO compilers: `astro check` (TypeScript 6, the devDependency)
+  // and oxlint's type-aware pass (oxlint-tsgolint's bundled TypeScript 7). TS 7
+  // removed what TS 6 only deprecates (`baseUrl`, `moduleResolution: node`, …),
+  // so keep this free of deprecation warnings and both agree.
+  "extends": "astro/tsconfigs/strict",
+  "include": [".astro/types.d.ts", "**/*", ".storybook/*"],
+  "exclude": ["dist", "storybook-static"],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    // `import.meta.dirname` etc. in the root config files
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
